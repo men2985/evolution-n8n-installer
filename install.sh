@@ -318,8 +318,10 @@ volumes:
 networks:
   frontend:
     external: true
+    name: frontend
   backend:
     external: true
+    name: backend
 EOF
 
 # Configurar Chatwoot
@@ -430,9 +432,18 @@ DATABASE_URL=postgresql://evolution_user:${DB_PASSWORD}@postgres:5432/evolution2
 EOF
 
 # Iniciar servicios
+# Iniciar servicios
+echo "Asegurando que las redes Docker existan..."
+docker network inspect frontend >/dev/null 2>&1 || docker network create frontend
+docker network inspect backend >/dev/null 2>&1 || docker network create backend
+
+echo "Iniciando n8n..."
 cd $N8N_DIR && docker-compose up -d
+echo "Iniciando Evolution API..."
 cd $EVOLUTION_DIR && docker-compose up -d
+echo "Iniciando Chatwoot..."
 cd $CHATWOOT_DIR && docker-compose up -d
+echo "Iniciando Redis..."
 cd $REDIS_DIR && docker-compose up -d
 
 # Configurar Nginx
