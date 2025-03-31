@@ -1,4 +1,5 @@
 # Instalar Nginx y Certbot
+apt-get update
 apt-get install -y nginx certbot python3-certbot-nginxcat <<EOF > /etc/nginx/sites-available/chatwoot
 server {
     listen 80;
@@ -43,6 +44,22 @@ read GOOGLE_PASSWORD
 stty echo
 echo ""
 [[ -z "$GOOGLE_PASSWORD" ]] && { echo "Error: La contraseña de Google no puede estar vacía"; exit 1; }
+
+# Verificar si las variables están definidas
+if [ -z "$DOMAIN" ]; then
+  echo "ERROR: La variable DOMAIN está vacía. Abortando."
+  exit 1
+fi
+
+if [ -z "$EMAIL" ]; then
+  echo "ERROR: La variable EMAIL está vacía. Abortando."
+  exit 1
+fi
+
+if [ -z "$GOOGLE_PASSWORD" ]; then
+  echo "ERROR: La variable GOOGLE_PASSWORD está vacía. Abortando."
+  exit 1
+fi
 
 # Definir subdominios y directorios
 N8N_SUBDOMAIN="n8n.${DOMAIN}"
@@ -463,7 +480,7 @@ networks:
 EOF
 
 # Configurar .env para Chatwoot
-cat <<EOF > $CHATWOOT_DIR/.env
+cat <<EOF > "$CHATWOOT_DIR/.env"
 SECRET_KEY_BASE=${SECRET_KEY_BASE}
 FRONTEND_URL=https://${CHATWOOT_SUBDOMAIN}
 WEBSOCKET_URL=wss://${CHATWOOT_SUBDOMAIN}/cable
@@ -581,11 +598,29 @@ server {
 }
 EOF
 
-# Habilitar configuraciones de Nginx
-ln -s /etc/nginx/sites-available/n8n /etc/nginx/sites-enabled/ 2>/dev/null || true
-ln -s /etc/nginx/sites-available/evolution /etc/nginx/sites-enabled/ 2>/dev/null || true
-ln -s /etc/nginx/sites-available/chatwoot /etc/nginx/sites-enabled/ 2>/dev/null || true
-ln -s /etc/nginx/sites-available/portainer /etc/nginx/sites-enabled/ 2>/dev/null || true
+# Verificar dominios antes de continuar
+echo "Verificando que los subdominios estén configurados correctamente:"
+echo "N8N_SUBDOMAIN: ${N8N_SUBDOMAIN}"
+echo "EVOLUTION_SUBDOMAIN: ${EVOLUTION_SUBDOMAIN}"
+echo "CHATWOOT_SUBDOMAIN: ${CHATWOOT_SUBDOMAIN}"
+echo "PORTAINER_SUBDOMAIN: ${PORTAINER_SUBDOMAIN}"
+
+if [ -z "${N8N_SUBDOMAIN}" ] || [ -z "${EVOLUTION_SUBDOMAIN}" ] || [ -z "${CHATWOOT_SUBDOMAIN}" ] || [ -z "${PORTAINER_SUBDOMAIN}" ]; then
+  echo "ERROR: Uno o más subdominios están vacíos. Abortando."
+  exit 1
+fi
+
+# Verificar enlaces simbólicos
+echo "Creando enlaces simbólicos para configuraciones de Nginx..."
+rm -f /etc/nginx/sites-enabled/n8n
+rm -f /etc/nginx/sites-enabled/evolution
+rm -f /etc/nginx/sites-enabled/chatwoot
+rm -f /etc/nginx/sites-enabled/portainer
+
+ln -sf /etc/nginx/sites-available/n8n /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/evolution /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/chatwoot /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/portainer /etc/nginx/sites-enabled/
 
 # Validar la configuración de Nginx antes de reiniciar
 echo "Validando configuración de Nginx..."
