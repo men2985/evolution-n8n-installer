@@ -43,8 +43,11 @@ systemctl start docker
 systemctl enable docker
 
 # Crear redes de Docker compartidas
-docker network create frontend || true
-docker network create backend || true
+echo "Creando redes Docker..."
+docker network rm frontend >/dev/null 2>&1 || true
+docker network rm backend >/dev/null 2>&1 || true
+docker network create frontend
+docker network create backend
 
 # Configurar n8n
 mkdir -p /home/docker/n8n/db
@@ -317,11 +320,11 @@ volumes:
     name: rabbitmq_data
 networks:
   frontend:
-    external: true
     name: frontend
-  backend:
     external: true
+  backend:
     name: backend
+    external: true
 EOF
 
 # Configurar Chatwoot
@@ -433,9 +436,16 @@ EOF
 
 # Iniciar servicios
 # Iniciar servicios
-echo "Asegurando que las redes Docker existan..."
-docker network inspect frontend >/dev/null 2>&1 || docker network create frontend
-docker network inspect backend >/dev/null 2>&1 || docker network create backend
+echo "Verificando redes Docker..."
+if ! docker network inspect frontend >/dev/null 2>&1; then
+  echo "Creando red frontend..."
+  docker network create frontend
+fi
+
+if ! docker network inspect backend >/dev/null 2>&1; then
+  echo "Creando red backend..."
+  docker network create backend
+fi
 
 echo "Iniciando n8n..."
 cd $N8N_DIR && docker-compose up -d
