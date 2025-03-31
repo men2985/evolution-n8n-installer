@@ -1,4 +1,6 @@
 #!/bin/bash
+# Evolution N8N Chatwoot Auto-Installer
+# Instalación fácil: sh <(curl https://raw.githubusercontent.com/men2985/evolution-n8n-installer/main/install.sh || wget -O - https://raw.githubusercontent.com/men2985/evolution-n8n-installer/main/install.sh)
 set -e
 
 # Solicitar información al usuario
