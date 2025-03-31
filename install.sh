@@ -157,7 +157,7 @@ echo "ALLOWHIDDENDIR=/var/lib/docker/containers" >> /etc/rkhunter.conf
 echo "ALLOWHIDDENDIR=/var/lib/docker/overlay2" >> /etc/rkhunter.conf
 # Actualizar rkhunter
 log_progress "Actualizando rkhunter..."
-rkhunter --update --skip-keypress
+DEBIAN_FRONTEND=noninteractive rkhunter --update --skip-keypress || true
 
 # Configurar firewall
 log_progress "Configurando firewall..."
@@ -933,7 +933,7 @@ echo "      - API Key: ${ENCRYPTION_KEY} (La misma que usa Evolution API)"
 echo ""
 # Ejecutar escaneo de seguridad
 log_progress "Ejecutando escaneo de seguridad con rkhunter..."
-rkhunter --check --skip-keypress --quiet
+DEBIAN_FRONTEND=noninteractive rkhunter --check --skip-keypress --quiet || true
 
 log_progress "Ejecutando escaneo de seguridad con chkrootkit..."
 chkrootkit
