@@ -38,7 +38,10 @@ fi
 # Solicitar información al usuario
 read -p "Ingrese su dominio principal (ejemplo.com): " DOMAIN
 read -p "Ingrese su correo electrónico para SSL y notificaciones: " EMAIL
-read -s -p "Ingrese su contraseña de aplicación de Google (para envío de correos): " GMAIL_APP_PASSWORD
+echo -n "Ingrese su contraseña de aplicación de Google (para envío de correos): "
+stty -echo
+read GMAIL_APP_PASSWORD
+stty echo
 echo ""
 
 # Validar formato del dominio (básico)
