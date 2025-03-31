@@ -1,5 +1,5 @@
 # Instalar Nginx y Certbot
-apt install -y nginx certbot python3-certbot-nginxcat <<EOF > /etc/nginx/sites-available/chatwoot
+apt-get install -y nginx certbot python3-certbot-nginxcat <<EOF > /etc/nginx/sites-available/chatwoot
 server {
     listen 80;
     server_name ${CHATWOOT_SUBDOMAIN};
@@ -31,7 +31,10 @@ set -e
 
 # Solicitar información al usuario
 read -p "Ingrese su dominio principal (ejemplo.com): " DOMAIN
+[[ -z "$DOMAIN" ]] && { echo "Error: El dominio no puede estar vacío"; exit 1; }
+
 read -p "Ingrese su correo electrónico para SSL: " EMAIL
+[[ -z "$EMAIL" ]] && { echo "Error: El correo electrónico no puede estar vacío"; exit 1; }
 
 # Usar stty para ocultar la contraseña al escribir
 echo -n "Ingrese la contraseña para la aplicación de Google (para Chatwoot): "
@@ -39,6 +42,7 @@ stty -echo
 read GOOGLE_PASSWORD
 stty echo
 echo ""
+[[ -z "$GOOGLE_PASSWORD" ]] && { echo "Error: La contraseña de Google no puede estar vacía"; exit 1; }
 
 # Definir subdominios y directorios
 N8N_SUBDOMAIN="n8n.${DOMAIN}"
@@ -50,6 +54,12 @@ EVOLUTION_DIR="/opt/evolution_app"
 REDIS_DIR="/opt/redis_app"
 CHATWOOT_DIR="/opt/chatwoot_app"
 PORTAINER_DIR="/opt/portainer_app"
+
+echo "Configurando subdominios:"
+echo "- n8n: ${N8N_SUBDOMAIN}"
+echo "- Evolution API: ${EVOLUTION_SUBDOMAIN}"
+echo "- Chatwoot: ${CHATWOOT_SUBDOMAIN}"
+echo "- Portainer: ${PORTAINER_SUBDOMAIN}"
 
 # Crear directorios para las aplicaciones
 mkdir -p $N8N_DIR $EVOLUTION_DIR $REDIS_DIR $CHATWOOT_DIR $PORTAINER_DIR
@@ -577,13 +587,37 @@ ln -s /etc/nginx/sites-available/evolution /etc/nginx/sites-enabled/ 2>/dev/null
 ln -s /etc/nginx/sites-available/chatwoot /etc/nginx/sites-enabled/ 2>/dev/null || true
 ln -s /etc/nginx/sites-available/portainer /etc/nginx/sites-enabled/ 2>/dev/null || true
 
-nginx -t && systemctl restart nginx
+# Validar la configuración de Nginx antes de reiniciar
+echo "Validando configuración de Nginx..."
+nginx -t || {
+  echo "Error en la configuración de Nginx. Revisando archivos..."
+  for config in /etc/nginx/sites-enabled/*; do
+    echo "Verificando $config:"
+    cat "$config"
+    echo "------------------------"
+  done
+  exit 1
+}
+
+# Reiniciar Nginx solo si la configuración es válida
+systemctl restart nginx || echo "Error al reiniciar Nginx"
 
 # SSL con certbot
-certbot --nginx -d ${N8N_SUBDOMAIN} --email ${EMAIL} --agree-tos --non-interactive
-certbot --nginx -d ${EVOLUTION_SUBDOMAIN} --email ${EMAIL} --agree-tos --non-interactive
-certbot --nginx -d ${CHATWOOT_SUBDOMAIN} --email ${EMAIL} --agree-tos --non-interactive
-certbot --nginx -d ${PORTAINER_SUBDOMAIN} --email ${EMAIL} --agree-tos --non-interactive
+if [ -n "${N8N_SUBDOMAIN}" ]; then
+  certbot --nginx -d "${N8N_SUBDOMAIN}" --email "${EMAIL}" --agree-tos --non-interactive
+fi
+
+if [ -n "${EVOLUTION_SUBDOMAIN}" ]; then
+  certbot --nginx -d "${EVOLUTION_SUBDOMAIN}" --email "${EMAIL}" --agree-tos --non-interactive
+fi
+
+if [ -n "${CHATWOOT_SUBDOMAIN}" ]; then
+  certbot --nginx -d "${CHATWOOT_SUBDOMAIN}" --email "${EMAIL}" --agree-tos --non-interactive
+fi
+
+if [ -n "${PORTAINER_SUBDOMAIN}" ]; then
+  certbot --nginx -d "${PORTAINER_SUBDOMAIN}" --email "${EMAIL}" --agree-tos --non-interactive
+fi
 systemctl restart nginx
 
 # Mostrar resumen
