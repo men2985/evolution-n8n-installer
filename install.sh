@@ -1,6 +1,11 @@
 # Instalar Nginx y Certbot
 apt-get update
-apt-get install -y nginx certbot python3-certbot-nginxcat <<EOF > /etc/nginx/sites-available/chatwoot
+apt-get install -y nginx certbot python3-certbot-nginx || {
+  echo "Error instalando nginx y certbot. Intentando instalar por separado..."
+  apt-get install -y nginx
+  apt-get install -y certbot
+  apt-get install -y python3-certbot-nginx
+}cat <<EOF > /etc/nginx/sites-available/chatwoot
 server {
     listen 80;
     server_name ${CHATWOOT_SUBDOMAIN};
@@ -30,20 +35,59 @@ EOF#!/bin/bash
 # Instalación fácil: sh <(curl https://raw.githubusercontent.com/men2985/evolution-n8n-installer/main/install.sh || wget -O - https://raw.githubusercontent.com/men2985/evolution-n8n-installer/main/install.sh)
 set -e
 
+# Función para asegurar entrada de usuario
+get_user_input() {
+  local prompt="$1"
+  local var_name="$2"
+  local default_value="$3"
+  local value=""
+  
+  # Intentar leer input con varios métodos
+  printf "%s" "$prompt"
+  read -r value </dev/tty || {
+    # Si falla, intentar otro método
+    echo "Error leyendo desde /dev/tty, intentando método alternativo..."
+    printf "%s" "$prompt"
+    read -r value || {
+      if [ -n "$default_value" ]; then
+        echo "Usando valor predeterminado: $default_value"
+        value="$default_value"
+      else
+        echo "ERROR: No se pudo leer entrada del usuario y no hay valor predeterminado."
+        exit 1
+      fi
+    }
+  }
+  
+  # Verificar que no esté vacío
+  if [ -z "$value" ] && [ -z "$default_value" ]; then
+    echo "ERROR: El valor no puede estar vacío."
+    exit 1
+  elif [ -z "$value" ] && [ -n "$default_value" ]; then
+    value="$default_value"
+  fi
+  
+  # Asignar valor a variable global
+  eval "$var_name=\"$value\""
+  echo "$var_name configurado como: ${!var_name}"
+}
+
 # Solicitar información al usuario
-read -p "Ingrese su dominio principal (ejemplo.com): " DOMAIN
-[[ -z "$DOMAIN" ]] && { echo "Error: El dominio no puede estar vacío"; exit 1; }
+echo "Por favor, introduce los siguientes datos:"
+get_user_input "Ingrese su dominio principal (ejemplo.com): " DOMAIN
 
-read -p "Ingrese su correo electrónico para SSL: " EMAIL
-[[ -z "$EMAIL" ]] && { echo "Error: El correo electrónico no puede estar vacío"; exit 1; }
+get_user_input "Ingrese su correo electrónico para SSL: " EMAIL
 
-# Usar stty para ocultar la contraseña al escribir
+# Pedir contraseña de Google de forma segura
 echo -n "Ingrese la contraseña para la aplicación de Google (para Chatwoot): "
-stty -echo
-read GOOGLE_PASSWORD
-stty echo
+stty -echo </dev/tty
+read GOOGLE_PASSWORD </dev/tty
+stty echo </dev/tty
 echo ""
-[[ -z "$GOOGLE_PASSWORD" ]] && { echo "Error: La contraseña de Google no puede estar vacía"; exit 1; }
+if [ -z "$GOOGLE_PASSWORD" ]; then
+  echo "ERROR: La contraseña de Google no puede estar vacía."
+  exit 1
+fi
 
 # Verificar si las variables están definidas
 if [ -z "$DOMAIN" ]; then
