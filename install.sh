@@ -1,4 +1,30 @@
-#!/bin/bash
+# Instalar Nginx y Certbot
+apt install -y nginx certbot python3-certbot-nginxcat <<EOF > /etc/nginx/sites-available/chatwoot
+server {
+    listen 80;
+    server_name ${CHATWOOT_SUBDOMAIN};
+
+    location / {
+        proxy_pass http://localhost:3200;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+    }
+
+    location /cable {
+        proxy_pass http://localhost:3200/cable;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF#!/bin/bash
 # Evolution N8N Chatwoot Auto-Installer
 # Instalación fácil: sh <(curl https://raw.githubusercontent.com/men2985/evolution-n8n-installer/main/install.sh || wget -O - https://raw.githubusercontent.com/men2985/evolution-n8n-installer/main/install.sh)
 set -e
@@ -18,14 +44,16 @@ echo ""
 N8N_SUBDOMAIN="n8n.${DOMAIN}"
 EVOLUTION_SUBDOMAIN="evoapi.${DOMAIN}"
 CHATWOOT_SUBDOMAIN="chat.${DOMAIN}"
+PORTAINER_SUBDOMAIN="portainer.${DOMAIN}"
 N8N_DIR="/opt/n8n_app"
 EVOLUTION_DIR="/opt/evolution_app"
 REDIS_DIR="/opt/redis_app"
 CHATWOOT_DIR="/opt/chatwoot_app"
+PORTAINER_DIR="/opt/portainer_app"
 
 # Crear directorios para las aplicaciones
-mkdir -p $N8N_DIR $EVOLUTION_DIR $REDIS_DIR $CHATWOOT_DIR
-mkdir -p /data/storage /data/postgres /data/redis
+mkdir -p $N8N_DIR $EVOLUTION_DIR $REDIS_DIR $CHATWOOT_DIR $PORTAINER_DIR
+mkdir -p /data/storage /data/postgres /data/redis /data/portainer
 
 # Generar contraseñas y claves seguras
 DB_PASSWORD=$(openssl rand -base64 12 | tr -d '/+=' | cut -c1-16)
@@ -34,12 +62,38 @@ REDIS_PASSWORD=$(openssl rand -base64 12 | tr -d '/+=' | cut -c1-16)
 POSTGRES_PASSWORD=$(openssl rand -base64 12 | tr -d '/+=' | cut -c1-16)
 SECRET_KEY_BASE=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-32)
 
-# Instalar dependencias
-apt update && apt upgrade -y
-apt install -y docker.io docker-compose nginx certbot python3-certbot-nginx
+# Instalar dependencias iniciales
+apt-get update
+apt-get install -y ca-certificates curl
+
+# Configurar repositorio oficial de Docker
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+
+# Añadir el repositorio a APT
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Actualizar e instalar Docker
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Configurar límites de logs para Docker
+mkdir -p /etc/docker
+cat <<EOF > /etc/docker/daemon.json
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+EOF
+
+# Reiniciar Docker para aplicar los cambios
+systemctl restart docker
 
 # Iniciar y habilitar Docker
-systemctl start docker
 systemctl enable docker
 
 # Crear redes de Docker compartidas
@@ -455,6 +509,7 @@ echo "Iniciando Chatwoot..."
 cd $CHATWOOT_DIR && docker-compose up -d
 echo "Iniciando Redis..."
 cd $REDIS_DIR && docker-compose up -d
+# Portainer ya ha sido iniciado anteriormente mediante docker run
 
 # Configurar Nginx
 cat <<EOF > /etc/nginx/sites-available/n8n
@@ -497,29 +552,21 @@ server {
 }
 EOF
 
-cat <<EOF > /etc/nginx/sites-available/chatwoot
+cat <<EOF > /etc/nginx/sites-available/portainer
 server {
     listen 80;
-    server_name ${CHATWOOT_SUBDOMAIN};
+    server_name ${PORTAINER_SUBDOMAIN};
 
     location / {
-        proxy_pass http://localhost:3200;
+        proxy_pass http://localhost:9000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
-    }
-
-    location /cable {
-        proxy_pass http://localhost:3200/cable;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "Upgrade";
-        proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
     }
 }
 EOF
@@ -528,6 +575,7 @@ EOF
 ln -s /etc/nginx/sites-available/n8n /etc/nginx/sites-enabled/ 2>/dev/null || true
 ln -s /etc/nginx/sites-available/evolution /etc/nginx/sites-enabled/ 2>/dev/null || true
 ln -s /etc/nginx/sites-available/chatwoot /etc/nginx/sites-enabled/ 2>/dev/null || true
+ln -s /etc/nginx/sites-available/portainer /etc/nginx/sites-enabled/ 2>/dev/null || true
 
 nginx -t && systemctl restart nginx
 
@@ -535,6 +583,7 @@ nginx -t && systemctl restart nginx
 certbot --nginx -d ${N8N_SUBDOMAIN} --email ${EMAIL} --agree-tos --non-interactive
 certbot --nginx -d ${EVOLUTION_SUBDOMAIN} --email ${EMAIL} --agree-tos --non-interactive
 certbot --nginx -d ${CHATWOOT_SUBDOMAIN} --email ${EMAIL} --agree-tos --non-interactive
+certbot --nginx -d ${PORTAINER_SUBDOMAIN} --email ${EMAIL} --agree-tos --non-interactive
 systemctl restart nginx
 
 # Mostrar resumen
